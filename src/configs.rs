@@ -22,7 +22,7 @@ pub(crate) struct Opt {
     pub request_timeout: usize,
 
     /// Externalities snapshot path to use.
-    #[arg(long, short, env = "SNAPSHOT_PATH")]
+    #[arg(long, short, default_value = "./", env = "SNAPSHOT_PATH")]
     pub snapshot_path: String,
 
     /// File path where to store the output of a tranform operation.
