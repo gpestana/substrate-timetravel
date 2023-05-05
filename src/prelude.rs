@@ -33,6 +33,9 @@ pub type Hash = core_primitives::Hash;
 /// The header type. We re-export it here, but we can easily get it from block as well.
 pub type Header = core_primitives::Header;
 
+pub type BlockNumberOf<T> = <T as frame_system::Config>::BlockNumber;
+pub type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
+
 pub use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 
 /// Default URI to connect to.

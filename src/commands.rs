@@ -67,8 +67,8 @@ macro_rules! transform_for {
                 log::info!(target: LOG_TARGET, "Loaded snapshot from {:?}", snapshot_path);
 
                 match operation {
-                    Operation::MinActiveStake => crate::operations::[<min_active_stake_ $runtime>]::<Runtime>(&mut ext),
-                    Operation::ElectionAnalysis => crate::operations::[<election_analysis_ $runtime>]::<Runtime>(&mut ext),
+                    Operation::MinActiveStake => crate::operations::[<min_active_stake_ $runtime>]::<Runtime>(&mut ext, output_path),
+                    Operation::ElectionAnalysis => crate::operations::[<election_analysis_ $runtime>]::<Runtime>(&mut ext, output_path),
                 }
             }
         }

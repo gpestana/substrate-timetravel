@@ -34,6 +34,7 @@ use anyhow::anyhow;
 use clap::Parser;
 use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
 use rpc::{RpcApiClient, SharedRpcClient};
+use serde::Serialize;
 use std::{ops::Deref, sync::Arc, time::Duration};
 use thiserror::Error;
 
@@ -215,6 +216,27 @@ async fn main() {
         "round of execution finished. outcome = {:?}",
         outcome
     );
+}
+
+pub(crate) fn write_csv<E: Serialize>(entry: E, output_path: &str) -> Result<(), anyhow::Error> {
+    let headers = if std::path::Path::new(output_path).exists() {
+        false
+    } else {
+        true
+    };
+    let csv = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .append(true)
+        .open(output_path)?;
+
+    let mut buffer = csv::WriterBuilder::new()
+        .has_headers(headers)
+        .from_writer(csv);
+    buffer.serialize(entry)?;
+    buffer.flush()?;
+
+    Ok(())
 }
 
 #[cfg(test)]

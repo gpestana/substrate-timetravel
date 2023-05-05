@@ -1,7 +1,12 @@
+use std::marker::PhantomData;
+
 use crate::gadgets;
 use crate::prelude::*;
 
+use EPM::BalanceOf;
+
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Parser)]
 #[cfg_attr(test, derive(PartialEq))]
@@ -17,7 +22,8 @@ macro_rules! election_analysis_for {
     ($runtime:ident) => {
         paste::paste! {
             pub(crate) fn [<election_analysis_ $runtime>]<T: EPM::Config>(
-                ext: &mut Ext
+                ext: &mut Ext,
+                output_path: String,
             ) -> Result<(), anyhow::Error> {
                 use $crate::[<$runtime _runtime_exports>]::*;
 
@@ -36,19 +42,39 @@ macro_rules! election_analysis_for {
     };
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct MinActiveStakeCsv {
+    block_number: u32,
+    min_active_stake: u128,
+}
+
 macro_rules! min_active_stake_for {
     ($runtime:ident) => {
         paste::paste! {
             pub(crate) fn [<min_active_stake_ $runtime>]<T: EPM::Config>(
-                ext: &mut Ext
+                ext: &mut Ext,
+                output_path: String,
             ) -> Result<(), anyhow::Error> {
                 use $crate::[<$runtime _runtime_exports>]::*;
 
                 log::info!(target: LOG_TARGET, "Transform::min_active_stake starting.");
 
                 let min_active_stake = gadgets::min_active_stake::<Runtime>(ext);
+                let block_number = gadgets::block_number::<Runtime>(ext);
 
-                log::info!(target: LOG_TARGET, "Transform::min_active_stake result {}", min_active_stake);
+                let csv_entry = MinActiveStakeCsv {
+                    block_number,
+                    min_active_stake,
+                };
+
+                crate::write_csv(csv_entry, &output_path)?;
+
+                log::info!(
+                    target: LOG_TARGET,
+                    "Transform::min_active_stake result {}; CSV entry stored in {:?}",
+                    min_active_stake,
+                    output_path
+                );
 
                 Ok(())
             }
