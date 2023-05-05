@@ -69,7 +69,24 @@ pub(crate) struct TransformConfig {
     #[arg(long, env = "AT")]
     pub at: Option<H256>,
 
+    /// If run is live, then the snapshot is noe required and the remote externalities are created on the fly.
+    #[arg(long, default_value_t = false)]
+    pub live: bool,
+
     /// The operation to perform.
     #[command(subcommand)]
     pub operation: Operation,
+}
+
+#[derive(Debug, Clone, Parser)]
+#[cfg_attr(test, derive(PartialEq))]
+pub(crate) enum Solver {
+    SeqPhragmen {
+        #[arg(long, default_value_t = 10)]
+        iterations: usize,
+    },
+    PhragMMS {
+        #[arg(long, default_value_t = 10)]
+        iterations: usize,
+    },
 }

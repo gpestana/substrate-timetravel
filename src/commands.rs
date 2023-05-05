@@ -1,6 +1,7 @@
 use crate::configs::{ExtractConfig, TransformConfig};
 use crate::gadgets;
 use crate::operations::Operation;
+use crate::prelude::*;
 use crate::Error;
 
 use anyhow::anyhow;
@@ -17,28 +18,35 @@ macro_rules! extract_for {
                 pallets: Vec<String>,
                 block_hash: H256,
                 snapshot_path: String,
-			)  -> Result<(), anyhow::Error> {
+                live: bool,
+			)  -> Result<Ext, anyhow::Error> {
 				use $crate::[<$runtime _runtime_exports>]::*;
 
             	log::info!(target: LOG_TARGET, "Scrapping keys for pallets {:?} in block {:?}", pallets, block_hash);
 
-				Builder::<Block>::new()
+                let state_snapshot = if live { None } else { Some(snapshot_path.clone().into())};
+
+				let ext = Builder::<Block>::new()
 					.mode(Mode::Online(OnlineConfig {
 						transport: Transport::Uri(uri),
 						at: Some(block_hash),
 						pallets,
 						hashed_prefixes: vec![<frame_system::BlockHash<Runtime>>::prefix_hash()],
 						hashed_keys: vec![[twox_128(b"System"), twox_128(b"Number")].concat()],
-						state_snapshot: Some(snapshot_path.clone().into()),
+						state_snapshot,
 						..Default::default()
 					}))
 					.build()
                     .await
+		            .map(|rx| rx.inner_ext)
                     .map_err(|e| return anyhow!(Error::Externalities{ error: e.to_string()}))?;
 
-				log::info!(target: LOG_TARGET, "Extract done, snapshot stored in {:?}", snapshot_path);
+                match live {
+                    false => log::info!(target: LOG_TARGET, "Extract done, snapshot stored in {:?}", snapshot_path),
+                    true => log::info!(target: LOG_TARGET, "Extract done, snapshot not stored"),
+                };
 
-                Ok(())
+                Ok(ext)
 			}
 		}
 	};
@@ -53,16 +61,24 @@ macro_rules! transform_for {
                 block_hash: H256,
                 output_path: String,
                 snapshot_path: String,
+                live: bool,
             )  -> Result<(), anyhow::Error> {
                 use $crate::[<$runtime _runtime_exports>]::*;
 
-                let mut ext = Builder::<Block>::new()
-                    .mode(Mode::Offline(OfflineConfig {
+                let mut ext = if live {
+                    let default_pallets = vec!["ElectionProviderMultiPhase".to_string(), "Staking".to_string(), "VoterList".to_string()];
+                    let ext = extract_cmd(uri, default_pallets, block_hash, snapshot_path.clone(), true).await?;
+                    ext
+                } else {
+                    Builder::<Block>::new()
+                        .mode(Mode::Offline(OfflineConfig {
 				        state_snapshot: SnapshotConfig::new(snapshot_path.clone()),
-                }))
-                .build()
-                .await
-                .map_err(|e| return anyhow!(Error::Externalities{ error: e.to_string()}))?;
+                    }))
+                    .build()
+                    .await
+		            .map(|rx| rx.inner_ext)
+                    .map_err(|e| return anyhow!(Error::Externalities{ error: e.to_string()}))?
+                };
 
                 log::info!(target: LOG_TARGET, "Loaded snapshot from {:?}", snapshot_path);
 

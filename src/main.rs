@@ -45,6 +45,9 @@ pub(crate) enum Error {
 
     #[error("Externalities error {error:?}")]
     Externalities { error: String },
+
+    #[error("Runtime error")]
+    RuntimeError { error: String },
 }
 
 /// Selector for diferent runtimes.
@@ -189,7 +192,7 @@ async fn main() {
                     }
                 };
                 let file_path = format!("{}/{}.data", snapshot_path, block_hash);
-                extract_cmd(rpc.uri().to_string(), config.pallets, block_hash, file_path).await
+                extract_cmd(rpc.uri().to_string(), config.pallets, block_hash, file_path, false).await
                 .map_err(|e| {
                     log::error!(target: LOG_TARGET, "Extract error: {:?}", e);
                 });
@@ -203,7 +206,7 @@ async fn main() {
                     }
                 };
                 let snapshot_path = format!("{}/{}.data", snapshot_path, block_hash);
-                transform_cmd(rpc.uri().to_string(), config.operation, block_hash, output_path ,snapshot_path).await
+                transform_cmd(rpc.uri().to_string(), config.operation, block_hash, output_path, snapshot_path, config.live).await
                 .map_err(|e| {
                     log::error!(target: LOG_TARGET, "Transform error: {:?}", e);
                 });
