@@ -1,5 +1,9 @@
 [package]
 name = "substrate-etl"
+description = "A CLI tool to extract, process and load state from Substrate-based chains."
+repository = "https://github.com/gpestana/substrate-etl"
+homepage = "https://github.com/gpestana/substrate-etl"
+keywords = ["substrate"]
 version = "0.1.0"
 edition = "2021"
 

@@ -1,4 +1,5 @@
-//! # `substrate-etc` CLI
+//! # `substrate-etl` CLI
+//!
 //! #### A CLI tool to extract, process and load state from Substrate-based chains
 //!
 //! `substrate-etl` is a tool that helps scrapping storage keys from remote substrate nodes and
