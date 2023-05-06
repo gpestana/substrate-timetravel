@@ -96,8 +96,7 @@ where
 
     ext.execute_with(|| {
         let weight_of = pallet_staking::Pallet::<T>::weight_of_fn();
-
-        let maybe_max_len = None; // TODO: parameterize fn and get this from somewhere.
+        let maybe_max_len = Some(T::MaxElectingVoters::get().saturated_into::<usize>());
 
         let max_allowed_len = {
             let all_voter_count = T::VoterList::count() as usize;
