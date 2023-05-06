@@ -1,3 +1,5 @@
+//! CLI configs for `subtrate-etl`.
+
 use super::*;
 use crate::operations::Operation;
 
@@ -5,6 +7,7 @@ use clap::Parser;
 
 use sp_core::H256;
 
+/// Clap CLI ops.
 #[derive(Debug, Clone, Parser)]
 #[cfg_attr(test, derive(PartialEq))]
 #[command(author, version, about)]
@@ -39,6 +42,7 @@ pub(crate) struct Opt {
     pub command: Command,
 }
 
+/// Commands for `substrate-etc` CLI.
 #[derive(Debug, Clone, Parser)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) enum Command {
@@ -50,6 +54,7 @@ pub(crate) enum Command {
     Transform(TransformConfig),
 }
 
+/// Configs for the `extract` operation.
 #[derive(Debug, Clone, Parser)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) struct ExtractConfig {
@@ -62,6 +67,7 @@ pub(crate) struct ExtractConfig {
     pub pallets: Vec<String>,
 }
 
+/// Configs for the `transform` operation.
 #[derive(Debug, Clone, Parser)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) struct TransformConfig {
@@ -78,6 +84,7 @@ pub(crate) struct TransformConfig {
     pub operation: Operation,
 }
 
+/// Solvers for NPoS elections.
 #[derive(Debug, Clone, Parser)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) enum Solver {

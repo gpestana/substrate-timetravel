@@ -1,19 +1,3 @@
-// Copyright (C) Parity Technologies (UK) Ltd.
-// This file is part of Polkadot.
-
-// Polkadot is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// Polkadot is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with Polkadot.  If not, see <http://www.gnu.org/licenses/>.
-
 //! JSON-RPC related types and helpers.
 
 use super::*;
@@ -26,7 +10,7 @@ use sc_transaction_pool_api::TransactionStatus;
 use sp_core::{storage::StorageKey, Bytes};
 use sp_version::RuntimeVersion;
 
-use std::{future::Future, time::Duration};
+use std::time::Duration;
 
 #[derive(frame_support::DebugNoBound, thiserror::Error)]
 pub(crate) enum RpcHelperError {
@@ -139,44 +123,4 @@ impl SharedRpcClient {
             .await?;
         Ok(Self(Arc::new(client), uri.to_owned()))
     }
-
-    /// Get a storage item and decode it as `T`.
-    ///
-    /// # Return value:
-    ///
-    /// The function returns:
-    ///
-    /// * `Ok(Some(val))` if successful.
-    /// * `Ok(None)` if the storage item was not found.
-    /// * `Err(e)` if the JSON-RPC call failed.
-    pub(crate) async fn get_storage_and_decode<'a, T: codec::Decode>(
-        &self,
-        key: &StorageKey,
-        hash: Option<Hash>,
-    ) -> Result<Option<T>, RpcHelperError> {
-        if let Some(bytes) = self.storage(key, hash).await? {
-            let decoded = <T as codec::Decode>::decode(&mut &*bytes.0)
-                .map_err::<RpcHelperError, _>(Into::into)?;
-            Ok(Some(decoded))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-/// Takes a future that returns `Bytes` and tries to decode those bytes into the type `Dec`.
-/// Warning: don't use for storage, it will fail for non-existent storage items.
-///
-/// # Return value:
-///
-/// The function returns:
-///
-/// * `Ok(val)` if successful.
-/// * `Err(RpcHelperError::JsonRpsee)` if the JSON-RPC call failed.
-/// * `Err(RpcHelperError::Codec)` if `Bytes` could not be decoded.
-pub(crate) async fn await_request_and_decode<'a, Dec: codec::Decode>(
-    req: impl Future<Output = Result<Bytes, RpcError>>,
-) -> Result<Dec, RpcHelperError> {
-    let bytes = req.await?;
-    Dec::decode(&mut &*bytes.0).map_err::<RpcHelperError, _>(Into::into)
 }

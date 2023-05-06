@@ -1,14 +1,25 @@
+//! Operations exposed by the CLI.
+//!
+//! Operations consist of a set of transformations over a populated externalities. Each operation
+//! relies on gadgets to fetch and mutate the state of the externalities.
+//!
+//! The result of an operation may be stored in disk to posterior analysis. Currently, the results
+//! are written into a CSV file.
+
 use crate::configs::Solver;
 use crate::gadgets;
 use crate::prelude::*;
 use sp_npos_elections::ElectionScore;
 
+use Staking::ActiveEraInfo;
 use EPM::{BalanceOf, SolutionOrSnapshotSize};
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
+/// Operations fetch and mutate state from an externalities. Each operation can be called as a
+/// CLI subcommand.
 #[derive(Debug, Clone, Parser)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) enum Operation {
@@ -20,11 +31,13 @@ pub(crate) enum Operation {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+/// The CSV representation of the `min_active_stake` operation result.
 pub(crate) struct MinActiveStakeCsv {
     block_number: u32,
     min_active_stake: u128,
 }
 
+/// Calculates the minimum active stake for a given externalities.
 macro_rules! min_active_stake_for {
     ($runtime:ident) => {
         paste::paste! {
@@ -59,9 +72,11 @@ macro_rules! min_active_stake_for {
     };
 }
 
+/// The CSV representation of the `election_analysis` operation result.
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct ElectionEntryCSV<T: EPM::Config> {
     block_number: u32,
+    active_era: u32,
     phrag_min_stake: u128,
     phrag_sum_stake: u128,
     phrag_sum_stake_squared: u128,
@@ -85,12 +100,10 @@ struct ElectionEntryCSV<T: EPM::Config> {
     _marker: PhantomData<T>,
 }
 
-// TODO: use? refactor?
-use frame_system::pallet_prelude::BlockNumberFor;
-
 impl<T: EPM::Config> ElectionEntryCSV<T> {
     fn new(
-        block_number: BlockNumberFor<T>,
+        block_number: BlockNumber,
+        active_era: Option<ActiveEraInfo>,
         phrag_solutions: (
             &EPM::RawSolution<EPM::SolutionOf<T::MinerConfig>>,
             &EPM::RawSolution<EPM::SolutionOf<T::MinerConfig>>,
@@ -104,9 +117,13 @@ impl<T: EPM::Config> ElectionEntryCSV<T> {
         min_active_stake: BalanceOf<T>,
     ) -> Self
     where
-        BlockNumberFor<T>: Into<u32>,
         BalanceOf<T>: Into<u128>,
     {
+        let active_era = match active_era {
+            Some(era) => era.index,
+            None => 0,
+        };
+
         let (phrag_min_stake, phrag_sum_stake, phrag_sum_stake_squared) = {
             let ElectionScore {
                 minimal_stake,
@@ -133,6 +150,7 @@ impl<T: EPM::Config> ElectionEntryCSV<T> {
 
         Self {
             block_number: block_number.into(),
+            active_era,
             phrag_min_stake,
             phrag_sum_stake,
             phrag_sum_stake_squared,
@@ -157,6 +175,15 @@ impl<T: EPM::Config> ElectionEntryCSV<T> {
     }
 }
 
+/// Comphreensive election and staking pallet analysis.
+///
+/// Besides fetching election and staking metadata, this operation computes the following:
+/// * Phragmen election score, given the current snapshot data;
+/// * MMS Phragmen election score, given the current snapshot data;
+/// * Delegated PoS election score, given the current snapshot data;
+/// * "Unbounded" delegated PoS election score. Note that for this election scheme, the snapshot is
+/// recalculated using an unbounded number of voters (i.e. it takes as many voters as existing in
+/// the voters list).
 macro_rules! election_analysis_for {
     ($runtime:ident) => {
         paste::paste! {
@@ -169,20 +196,22 @@ macro_rules! election_analysis_for {
                 log::info!(target: LOG_TARGET, "Transform::election_analysis starting.");
 
                 let (snapshot_metadata, snapshot_size) = gadgets::snapshot_data_or_force::<Runtime>(ext);
-
                 let min_active_stake = gadgets::min_active_stake::<Runtime>(ext);
                 let block_number = gadgets::block_number::<Runtime>(ext);
+                let active_era = gadgets::active_era::<Runtime>(ext);
 
                 let phrag_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
                 let phrag_mms_raw_solution = gadgets::mine_with::<Runtime>(&Solver::PhragMMS{iterations: 10}, ext, false)?;
 
                 let dpos_score = gadgets::mine_dpos::<Runtime>(ext)?;
 
-                let (snapshot_metadata_unbound, snapshot_size_unbound) = gadgets::calculate_and_store_unbounded_snapshot::<Runtime>(ext)?;
+                // force new unbounded snapshot to compute the unbounded dpos election.
+                let (snapshot_metadata_unbound, snapshot_size_unbound) = gadgets::compute_and_store_unbounded_snapshot::<Runtime>(ext)?;
                 let dpos_unbound_score = gadgets::mine_dpos::<Runtime>(ext)?;
 
                 let csv_entry = ElectionEntryCSV::<Runtime>::new(
                     block_number,
+                    active_era,
                     (&phrag_raw_solution, &phrag_mms_raw_solution),
                     dpos_score,
                     dpos_unbound_score,

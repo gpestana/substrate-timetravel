@@ -1,6 +1,10 @@
+//! Library of gadgets to apply over a given externalities.
+//!
+//! Gadgets are methods that extract and mutate runtime state based on a given externalities. The
+//! gadgets are built to be modular and used across operations.
+
 use crate::configs::Solver;
 use crate::prelude::*;
-use crate::Error;
 
 use anyhow::anyhow;
 
@@ -11,8 +15,23 @@ use frame_support::traits::Get;
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_npos_elections::{BalancingConfig, ElectionScore, EvaluateSupport};
 use sp_runtime::{traits::Zero, SaturatedConversion};
+use Staking::ActiveEraInfo;
 use EPM::{BalanceOf, RoundSnapshot, SolutionOrSnapshotSize};
 
+/// Returns the current block number.
+pub(crate) fn block_number<T: EPM::Config>(ext: &mut Ext) -> BlockNumberFor<T> {
+    ext.execute_with(|| <frame_system::Pallet<T>>::block_number())
+}
+
+/// Returns the current active era.
+pub(crate) fn active_era<T: Staking::Config>(ext: &mut Ext) -> Option<ActiveEraInfo> {
+    ext.execute_with(|| <Staking::ActiveEra<T>>::get())
+}
+
+/// Returns the snapshot bounds and encoded size.
+///
+/// If the snapshot does not exist in the current externalities, it creates a new one using the
+/// same algorithm as the runtime.
 pub(crate) fn snapshot_data_or_force<T: EPM::Config>(
     ext: &mut Ext,
 ) -> (SolutionOrSnapshotSize, usize) {
@@ -25,7 +44,7 @@ pub(crate) fn snapshot_data_or_force<T: EPM::Config>(
         } else {
             log::info!(
                 target: LOG_TARGET,
-                "snapshot_data_or_force: creating a fake snapshot now."
+                "snapshot_data_or_force: creating a snapshot now."
             );
             <EPM::Pallet<T>>::create_snapshot().unwrap();
         };
@@ -40,7 +59,12 @@ pub(crate) fn snapshot_data_or_force<T: EPM::Config>(
     })
 }
 
-pub(crate) fn calculate_and_store_unbounded_snapshot<T>(
+/// Computes a new unbounded snapshot and stores it.
+///
+/// The new snapshot is unbounded in terms of the number of voters, i.e., all the voters in the
+/// voter list will be used in the creation of the new snashot. The target bound remains
+/// `MaxElectableTargets`.
+pub(crate) fn compute_and_store_unbounded_snapshot<T>(
     ext: &mut Ext,
 ) -> Result<(SolutionOrSnapshotSize, usize), anyhow::Error>
 where
@@ -57,20 +81,12 @@ where
             <<T as EPM::Config>::DataProvider as ElectionDataProvider>::electable_targets(Some(
                 target_limit,
             ))
-            .map_err(|e| {
-                return anyhow!(Error::RuntimeError {
-                    error: e.to_string()
-                });
-            })?;
+            .map_err(|e| anyhow!(e.to_string()))?;
 
         let voters = <<T as EPM::Config>::DataProvider as ElectionDataProvider>::electing_voters(
             Some(voter_limit),
         )
-        .map_err(|e| {
-            return anyhow!(Error::RuntimeError {
-                error: e.to_string()
-            });
-        })?;
+        .map_err(|e| anyhow!(e.to_string()))?;
 
         // mimic `EPM::create_snashot_internal` and store voter-unbounded snapshot.
         let metadata = SolutionOrSnapshotSize {
@@ -83,15 +99,22 @@ where
         let snapshot = RoundSnapshot::<_, _> { voters, targets };
         <EPM::Snapshot<T>>::put(snapshot);
 
-        Ok((metadata, <EPM::Snapshot<T>>::get().unwrap().encode().len()))
+        // pull from storage to ensure snapshot is set.
+        let snapshot_len = <EPM::Snapshot<T>>::get()
+            .expect("snapshot should exist, qed.")
+            .encode()
+            .len();
+
+        Ok((metadata, snapshot_len))
     })
 }
 
+/// Calculates the minimum active stake for a existing snapshot.
 pub(crate) fn min_active_stake<T: EPM::Config + Staking::Config>(ext: &mut Ext) -> BalanceOf<T>
 where
     BalanceOf<T>: From<u64>,
 {
-    use frame_election_provider_support::SortedListProvider;
+    //use frame_election_provider_support::SortedListProvider;
     const NPOS_MAX_ITERATIONS_COEFFICIENT: u32 = 2;
 
     ext.execute_with(|| {
@@ -139,10 +162,6 @@ where
     })
 }
 
-pub(crate) fn block_number<T: EPM::Config>(ext: &mut Ext) -> BlockNumberFor<T> {
-    ext.execute_with(|| <frame_system::Pallet<T>>::block_number())
-}
-
 /// Compute the election. It expects to NOT be `Phase::Off`. In other words, the snapshot must
 /// exists on the given externalities.
 fn mine_solution<T, S>(
@@ -157,12 +176,23 @@ where
     >,
 {
     ext.execute_with(|| {
-        let (solution, _) = <EPM::Pallet<T>>::mine_solution().unwrap(); // TODO: throw anyhow
+        let (solution, _) = <EPM::Pallet<T>>::mine_solution()
+            .map_err(|e| anyhow!("Error mining solution: {:?}.", e))?;
         if do_feasibility {
             let _ =
                 <EPM::Pallet<T>>::feasibility_check(solution.clone(), EPM::ElectionCompute::Signed)
-                    .unwrap(); // TODO:: throw anyhow
+                    .map_err(|e| anyhow!("Error calculating feasibility check: {:?}.", e))?;
         }
+
+        let RoundSnapshot { voters, targets } = EPM::Snapshot::<T>::get().unwrap();
+        log::info!(
+            target: LOG_TARGET,
+            "mined a npos-like solution with score = {:?} (voters: {:?}, targets: {:?})",
+            solution,
+            voters,
+            targets,
+        );
+
         Ok(solution)
     })
 }
@@ -174,6 +204,7 @@ frame_support::parameter_types! {
     pub static Balancing: Option<BalancingConfig> = Some( BalancingConfig { iterations: BalanceIterations::get(), tolerance: 0 } );
 }
 
+/// Mines an election solution given a solver.
 pub(crate) fn mine_with<T>(
     solver: &Solver,
     ext: &mut Ext,
@@ -207,9 +238,14 @@ where
     }
 }
 
+/// Mines a Delegated Proof-of-Stake (DPoS) given the current snapshot and returns the election
+/// score.
+///
+/// In this DPoS flavour, the vote weight (stake) of the nominators' votes are distributed equaly
+/// across their targets. The number of voters considered for the election is defined by the
+/// snapshot state, whereas the number of targets considered are defined by `EPM::DesiredTargets`.
 pub(crate) fn mine_dpos<T: EPM::Config>(ext: &mut Ext) -> Result<ElectionScore, anyhow::Error> {
     ext.execute_with(|| {
-        use EPM::{RoundSnapshot, SolutionOrSnapshotSize};
         let RoundSnapshot { voters, .. } = EPM::Snapshot::<T>::get().unwrap();
         let desired_targets = EPM::DesiredTargets::<T>::get().unwrap();
 
