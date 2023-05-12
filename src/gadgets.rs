@@ -10,7 +10,9 @@ use anyhow::anyhow;
 
 use codec::Encode;
 use frame_election_provider_support::NposSolver;
-use frame_election_provider_support::{ElectionDataProvider, SortedListProvider};
+use frame_election_provider_support::{
+    ElectionDataProvider, ElectionProviderBase, NposSolution, SortedListProvider,
+};
 use frame_support::traits::Get;
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_npos_elections::{BalancingConfig, ElectionScore, EvaluateSupport};
@@ -69,6 +71,7 @@ pub(crate) fn compute_and_store_unbounded_snapshot<T>(
 ) -> Result<(SolutionOrSnapshotSize, usize), anyhow::Error>
 where
     T: EPM::Config + Staking::Config,
+    EPM::Pallet<T>: ElectionProviderBase,
 {
     ext.execute_with(|| {
         EPM::Pallet::<T>::kill_snapshot();
@@ -94,7 +97,16 @@ where
             targets: targets.len() as u32,
         };
         <EPM::SnapshotMetadata<T>>::put(metadata);
-        <EPM::DesiredTargets<T>>::put(target_limit as u32);
+
+        let mut desired_targets =
+            <EPM::Pallet<T> as ElectionProviderBase>::desired_targets_checked()
+                .map_err(|e| anyhow!(e.to_string()))?;
+        let max_desired_targets: u32 = targets.len() as u32;
+        if desired_targets > max_desired_targets {
+            desired_targets = max_desired_targets;
+        }
+
+        <EPM::DesiredTargets<T>>::put(desired_targets);
 
         let snapshot = RoundSnapshot::<_, _> { voters, targets };
         <EPM::Snapshot<T>>::put(snapshot);
@@ -176,24 +188,27 @@ where
     >,
 {
     ext.execute_with(|| {
-        let (solution, _) = <EPM::Pallet<T>>::mine_solution()
+        let (raw_solution, _) = <EPM::Pallet<T>>::mine_solution()
             .map_err(|e| anyhow!("Error mining solution: {:?}.", e))?;
         if do_feasibility {
-            let _ =
-                <EPM::Pallet<T>>::feasibility_check(solution.clone(), EPM::ElectionCompute::Signed)
-                    .map_err(|e| anyhow!("Error calculating feasibility check: {:?}.", e))?;
+            let _ = <EPM::Pallet<T>>::feasibility_check(
+                raw_solution.clone(),
+                EPM::ElectionCompute::Signed,
+            )
+            .map_err(|e| anyhow!("Error calculating feasibility check: {:?}.", e))?;
         }
 
-        let RoundSnapshot { voters, targets } = EPM::Snapshot::<T>::get().unwrap();
+        let voter_count = raw_solution.solution.voter_count();
+        let target_count = raw_solution.solution.unique_targets().len();
+
         log::info!(
             target: LOG_TARGET,
-            "mined a npos-like solution with score = {:?} (voters: {:?}, targets: {:?})",
-            solution,
-            voters,
-            targets,
+            "mined a npos-like solution (voters: {:?}, targets: {:?}).",
+            voter_count,
+            target_count,
         );
 
-        Ok(solution)
+        Ok(raw_solution)
     })
 }
 
@@ -243,12 +258,20 @@ where
 ///
 /// In this DPoS flavour, the vote weight (stake) of the nominators' votes are distributed equaly
 /// across their targets. The number of voters considered for the election is defined by the
-/// snapshot state, whereas the number of targets considered are defined by `EPM::DesiredTargets`.
-pub(crate) fn mine_dpos<T: EPM::Config>(ext: &mut Ext) -> Result<ElectionScore, anyhow::Error> {
+/// snapshot state. The number of final winners is defined by `EPM::DesiredTargets`.
+pub(crate) fn mine_dpos<T>(ext: &mut Ext) -> Result<ElectionScore, anyhow::Error>
+where
+    T: EPM::Config + Staking::Config,
+{
     ext.execute_with(|| {
-        let RoundSnapshot { voters, .. } = EPM::Snapshot::<T>::get().unwrap();
-        let desired_targets = EPM::DesiredTargets::<T>::get().unwrap();
+        let RoundSnapshot { voters, targets } =
+            EPM::Snapshot::<T>::get().ok_or(anyhow!("Snapshot did not exist."))?;
+        let snapshot_targets = targets;
+        let desired_targets =
+            EPM::DesiredTargets::<T>::get().ok_or(anyhow!("Desired targets did not exist."))?;
 
+        let mut skip_targets = 0;
+        let mut num_votes_per_voter = vec![];
         let mut assignments: Vec<sp_npos_elections::StakedAssignment<T::AccountId>> = vec![];
 
         voters.into_iter().for_each(|(who, stake, targets)| {
@@ -262,16 +285,23 @@ pub(crate) fn mine_dpos<T: EPM::Config>(ext: &mut Ext) -> Result<ElectionScore, 
                 return;
             }
 
+            num_votes_per_voter.push(targets.len());
+
             let mut distribution = vec![];
             let share: u128 = (stake as u128) / (targets.len() as u128);
             for target in targets {
-                distribution.push((target.clone(), share));
-            }
+                if !<<T as Staking::Config>::TargetList as SortedListProvider<AccountIdOf<T>>>::contains(&target) {
+                    skip_targets = skip_targets + 1;
+                } else {
+                    distribution.push((target.clone(), share));
+                }
 
+            }
             assignments.push(sp_npos_elections::StakedAssignment { who, distribution });
         });
 
         let mut supports = Vec::from_iter(sp_npos_elections::to_supports(&assignments[..]));
+        let supports_len = supports.len();
         supports.sort_by_key(|(_, support)| support.total);
         let supports = supports
             .into_iter()
@@ -284,8 +314,14 @@ pub(crate) fn mine_dpos<T: EPM::Config>(ext: &mut Ext) -> Result<ElectionScore, 
 
         log::info!(
             target: LOG_TARGET,
-            "mined a dpos-like solution with score = {:?}",
-            score
+            "mined a dpos-like solution with score = {:?}, with {} winners (out of {} desired winners). skipped {} targets from: snapshot {}, target_list: {}. Avg votes per voter: {}.",
+            score,
+            supports_len,
+            desired_targets,
+            skip_targets,
+            snapshot_targets.len(),
+            <<T as Staking::Config>::TargetList as SortedListProvider<AccountIdOf<T>>>::iter().count(),
+            num_votes_per_voter.iter().sum::<usize>() as f32 / num_votes_per_voter.len() as f32,
         );
 
         Ok(score)

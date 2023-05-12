@@ -80,9 +80,9 @@ struct ElectionEntryCSV<T: EPM::Config> {
     phrag_min_stake: u128,
     phrag_sum_stake: u128,
     phrag_sum_stake_squared: u128,
-    phrag_mms_min_stake: u128,
-    phrag_mms_sum_stake: u128,
-    phrag_mms_sum_stake_squared: u128,
+    phrag_unbound_min_stake: u128,
+    phrag_unbound_sum_stake: u128,
+    phrag_unbound_sum_stake_squared: u128,
     dpos_min_stake: u128,
     dpos_sum_stake: u128,
     dpos_sum_stake_squared: u128,
@@ -133,7 +133,7 @@ impl<T: EPM::Config> ElectionEntryCSV<T> {
             (minimal_stake, sum_stake, sum_stake_squared)
         };
 
-        let (phrag_mms_min_stake, phrag_mms_sum_stake, phrag_mms_sum_stake_squared) = {
+        let (phrag_unbound_min_stake, phrag_unbound_sum_stake, phrag_unbound_sum_stake_squared) = {
             let ElectionScore {
                 minimal_stake,
                 sum_stake,
@@ -154,9 +154,9 @@ impl<T: EPM::Config> ElectionEntryCSV<T> {
             phrag_min_stake,
             phrag_sum_stake,
             phrag_sum_stake_squared,
-            phrag_mms_min_stake,
-            phrag_mms_sum_stake,
-            phrag_mms_sum_stake_squared,
+            phrag_unbound_min_stake,
+            phrag_unbound_sum_stake,
+            phrag_unbound_sum_stake_squared,
             dpos_min_stake: dpos_score.minimal_stake,
             dpos_sum_stake: dpos_score.sum_stake,
             dpos_sum_stake_squared: dpos_score.sum_stake_squared,
@@ -201,18 +201,20 @@ macro_rules! election_analysis_for {
                 let active_era = gadgets::active_era::<Runtime>(ext);
 
                 let phrag_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
-                let phrag_mms_raw_solution = gadgets::mine_with::<Runtime>(&Solver::PhragMMS{iterations: 10}, ext, false)?;
 
                 let dpos_score = gadgets::mine_dpos::<Runtime>(ext)?;
 
-                // force new unbounded snapshot to compute the unbounded dpos election.
+                // force new unbounded snapshot to compute the unbounded npos and dpos elections.
                 let (snapshot_metadata_unbound, snapshot_size_unbound) = gadgets::compute_and_store_unbounded_snapshot::<Runtime>(ext)?;
+
+
+                let phrag_unbound_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
                 let dpos_unbound_score = gadgets::mine_dpos::<Runtime>(ext)?;
 
                 let csv_entry = ElectionEntryCSV::<Runtime>::new(
                     block_number,
                     active_era,
-                    (&phrag_raw_solution, &phrag_mms_raw_solution),
+                    (&phrag_raw_solution, &phrag_unbound_raw_solution),
                     dpos_score,
                     dpos_unbound_score,
                     snapshot_metadata,
