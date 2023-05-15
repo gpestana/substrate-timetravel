@@ -91,25 +91,30 @@ where
         )
         .map_err(|e| anyhow!(e.to_string()))?;
 
-        // mimic `EPM::create_snashot_internal` and store voter-unbounded snapshot.
-        let metadata = SolutionOrSnapshotSize {
-            voters: voters.len() as u32,
-            targets: targets.len() as u32,
-        };
-        <EPM::SnapshotMetadata<T>>::put(metadata);
-
         let mut desired_targets =
             <EPM::Pallet<T> as ElectionProviderBase>::desired_targets_checked()
                 .map_err(|e| anyhow!(e.to_string()))?;
         let max_desired_targets: u32 = targets.len() as u32;
         if desired_targets > max_desired_targets {
+            log::warn!(
+                target: LOG_TARGET,
+                "desired_targets: {} > targets.len(): {}, capping desired_targets",
+                desired_targets,
+                max_desired_targets
+            );
             desired_targets = max_desired_targets;
         }
 
-        <EPM::DesiredTargets<T>>::put(desired_targets);
+        // mimic `EPM::create_snashot_internal` and store voter-unbounded snapshot.
+        let metadata = SolutionOrSnapshotSize {
+            voters: voters.len() as u32,
+            targets: targets.len() as u32,
+        };
 
         let snapshot = RoundSnapshot::<_, _> { voters, targets };
         <EPM::Snapshot<T>>::put(snapshot);
+        <EPM::SnapshotMetadata<T>>::put(metadata);
+        <EPM::DesiredTargets<T>>::put(desired_targets);
 
         // pull from storage to ensure snapshot is set.
         let snapshot_len = <EPM::Snapshot<T>>::get()
@@ -314,7 +319,7 @@ where
 
         log::info!(
             target: LOG_TARGET,
-            "mined a dpos-like solution with score = {:?}, with {} winners (out of {} desired winners). skipped {} targets from: snapshot {}, target_list: {}. Avg votes per voter: {}.",
+            "mined a dpos-like solution with score = {:?}. Targets with votes: {} (from which, {} desired winners were selected). Skipped {} targets from: snapshot {}, target_list: {}. Avg votes per voter: {}.",
             score,
             supports_len,
             desired_targets,

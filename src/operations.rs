@@ -201,12 +201,10 @@ macro_rules! election_analysis_for {
                 let active_era = gadgets::active_era::<Runtime>(ext);
 
                 let phrag_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
-
                 let dpos_score = gadgets::mine_dpos::<Runtime>(ext)?;
 
                 // force new unbounded snapshot to compute the unbounded npos and dpos elections.
                 let (snapshot_metadata_unbound, snapshot_size_unbound) = gadgets::compute_and_store_unbounded_snapshot::<Runtime>(ext)?;
-
 
                 let phrag_unbound_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
                 let dpos_unbound_score = gadgets::mine_dpos::<Runtime>(ext)?;
