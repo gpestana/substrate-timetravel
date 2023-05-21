@@ -75,6 +75,10 @@ pub(crate) struct TransformConfig {
     #[arg(long, env = "AT")]
     pub at: Option<H256>,
 
+    /// Compute unbounded election operations or not.
+    #[arg(long, default_value_t = false)]
+    pub compute_unbounded: bool,
+
     /// If run is live, then the snapshot is noe required and the remote externalities are created on the fly.
     #[arg(long, default_value_t = false)]
     pub live: bool,

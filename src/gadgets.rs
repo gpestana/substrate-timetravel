@@ -5,6 +5,7 @@
 
 use crate::configs::Solver;
 use crate::prelude::*;
+use crate::utils;
 
 use anyhow::anyhow;
 
@@ -131,6 +132,8 @@ pub(crate) fn min_active_stake<T: EPM::Config + Staking::Config>(ext: &mut Ext) 
 where
     BalanceOf<T>: From<u64>,
 {
+    log::info!(target: LOG_TARGET, "Calculating min_active_state.");
+
     //use frame_election_provider_support::SortedListProvider;
     const NPOS_MAX_ITERATIONS_COEFFICIENT: u32 = 2;
 
@@ -234,6 +237,8 @@ where
     T: EPM::Config,
     T::Solver: NposSolver<Error = sp_npos_elections::Error>,
 {
+    log::info!(target: LOG_TARGET, "Mining NPoS.");
+
     use frame_election_provider_support::{PhragMMS, SequentialPhragmen};
 
     match solver {
@@ -264,11 +269,16 @@ where
 /// In this DPoS flavour, the vote weight (stake) of the nominators' votes are distributed equaly
 /// across their targets. The number of voters considered for the election is defined by the
 /// snapshot state. The number of final winners is defined by `EPM::DesiredTargets`.
-pub(crate) fn mine_dpos<T>(ext: &mut Ext) -> Result<ElectionScore, anyhow::Error>
+pub(crate) fn mine_dpos<T>(
+    ext: &mut Ext,
+    distribution_type: utils::ShareDistribution,
+) -> Result<ElectionScore, anyhow::Error>
 where
     T: EPM::Config + Staking::Config,
 {
     ext.execute_with(|| {
+        log::info!(target: LOG_TARGET, "Mining DPoS with {:?}.", distribution_type);
+
         let RoundSnapshot { voters, targets } =
             EPM::Snapshot::<T>::get().ok_or(anyhow!("Snapshot did not exist."))?;
         let snapshot_targets = targets;
@@ -278,6 +288,8 @@ where
         let mut skip_targets = 0;
         let mut num_votes_per_voter = vec![];
         let mut assignments: Vec<sp_npos_elections::StakedAssignment<T::AccountId>> = vec![];
+
+        let sorted_targets_by_stake = utils::SortedTargets::<_>::from_voters(voters.clone());
 
         voters.into_iter().for_each(|(who, stake, targets)| {
             if targets.is_empty() || stake == 0 {
@@ -293,14 +305,13 @@ where
             num_votes_per_voter.push(targets.len());
 
             let mut distribution = vec![];
-            let share: u128 = (stake as u128) / (targets.len() as u128);
-            for target in targets {
-                if !<<T as Staking::Config>::TargetList as SortedListProvider<AccountIdOf<T>>>::contains(&target) {
-                    skip_targets = skip_targets + 1;
-                } else {
-                    distribution.push((target.clone(), share));
-                }
-
+            let shares = utils::share_distribution::<T::AccountId>(&sorted_targets_by_stake, stake, distribution_type);
+            for share in shares {
+                //if !<<T as Staking::Config>::TargetList as SortedListProvider<AccountIdOf<T>>>::contains(&share.0) {
+                //    skip_targets = skip_targets + 1;
+                //} else {
+                distribution.push((share.0, share.1 as u128));
+                //}
             }
             assignments.push(sp_npos_elections::StakedAssignment { who, distribution });
         });

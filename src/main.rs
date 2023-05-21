@@ -86,6 +86,7 @@ mod gadgets;
 mod operations;
 mod prelude;
 mod rpc;
+mod utils;
 
 use configs::{Command, Opt};
 use prelude::*;
@@ -260,7 +261,15 @@ async fn main() {
                     }
                 };
                 let snapshot_path = format!("{}/{}.data", snapshot_path, block_hash);
-                transform_cmd(rpc.uri().to_string(), config.operation, block_hash, output_path, snapshot_path, config.live).await
+                transform_cmd(
+                    rpc.uri().to_string(),
+                    config.operation,
+                    block_hash,
+                    output_path,
+                    snapshot_path,
+                    config.compute_unbounded,
+                    config.live
+                ).await
                 .map_err(|e| {
                     log::error!(target: LOG_TARGET, "Transform error: {:?}", e);
                 }).unwrap();

@@ -9,6 +9,7 @@
 use crate::configs::Solver;
 use crate::gadgets;
 use crate::prelude::*;
+use crate::utils::ShareDistribution;
 use sp_npos_elections::ElectionScore;
 
 use Staking::ActiveEraInfo;
@@ -83,12 +84,18 @@ struct ElectionEntryCSV<T: EPM::Config> {
     phrag_unbound_min_stake: u128,
     phrag_unbound_sum_stake: u128,
     phrag_unbound_sum_stake_squared: u128,
-    dpos_min_stake: u128,
-    dpos_sum_stake: u128,
-    dpos_sum_stake_squared: u128,
-    dpos_unbound_min_stake: u128,
-    dpos_unbound_sum_stake: u128,
-    dpos_unbound_sum_stake_squared: u128,
+    dpos_min_stake_prorata: u128,
+    dpos_sum_stake_prorata: u128,
+    dpos_sum_stake_squared_prorata: u128,
+    dpos_min_stake_pareto: u128,
+    dpos_sum_stake_pareto: u128,
+    dpos_sum_stake_squared_pareto: u128,
+    dpos_unbound_min_stake_prorata: u128,
+    dpos_unbound_sum_stake_prorata: u128,
+    dpos_unbound_sum_stake_squared_prorata: u128,
+    dpos_unbound_min_stake_pareto: u128,
+    dpos_unbound_sum_stake_pareto: u128,
+    dpos_unbound_sum_stake_squared_pareto: u128,
     voters: u32,
     targets: u32,
     snapshot_size: usize,
@@ -108,8 +115,10 @@ impl<T: EPM::Config> ElectionEntryCSV<T> {
             &EPM::RawSolution<EPM::SolutionOf<T::MinerConfig>>,
             &EPM::RawSolution<EPM::SolutionOf<T::MinerConfig>>,
         ),
-        dpos_score: ElectionScore,
-        dpos_unbounded_score: ElectionScore,
+        dpos_score_prorata: ElectionScore,
+        dpos_score_pareto: ElectionScore,
+        dpos_unbounded_score_prorata: ElectionScore,
+        dpos_unbounded_score_pareto: ElectionScore,
         snapshot_metadata: SolutionOrSnapshotSize,
         snapshot_size: usize,
         snapshot_metadata_unbound: SolutionOrSnapshotSize,
@@ -157,12 +166,18 @@ impl<T: EPM::Config> ElectionEntryCSV<T> {
             phrag_unbound_min_stake,
             phrag_unbound_sum_stake,
             phrag_unbound_sum_stake_squared,
-            dpos_min_stake: dpos_score.minimal_stake,
-            dpos_sum_stake: dpos_score.sum_stake,
-            dpos_sum_stake_squared: dpos_score.sum_stake_squared,
-            dpos_unbound_min_stake: dpos_unbounded_score.minimal_stake,
-            dpos_unbound_sum_stake: dpos_unbounded_score.sum_stake,
-            dpos_unbound_sum_stake_squared: dpos_unbounded_score.sum_stake_squared,
+            dpos_min_stake_prorata: dpos_score_prorata.minimal_stake,
+            dpos_sum_stake_prorata: dpos_score_prorata.sum_stake,
+            dpos_sum_stake_squared_prorata: dpos_score_prorata.sum_stake_squared,
+            dpos_min_stake_pareto: dpos_score_pareto.minimal_stake,
+            dpos_sum_stake_pareto: dpos_score_pareto.sum_stake,
+            dpos_sum_stake_squared_pareto: dpos_score_pareto.sum_stake_squared,
+            dpos_unbound_min_stake_prorata: dpos_unbounded_score_prorata.minimal_stake,
+            dpos_unbound_sum_stake_prorata: dpos_unbounded_score_prorata.sum_stake,
+            dpos_unbound_sum_stake_squared_prorata: dpos_unbounded_score_prorata.sum_stake_squared,
+            dpos_unbound_min_stake_pareto: dpos_unbounded_score_pareto.minimal_stake,
+            dpos_unbound_sum_stake_pareto: dpos_unbounded_score_pareto.sum_stake,
+            dpos_unbound_sum_stake_squared_pareto: dpos_unbounded_score_pareto.sum_stake_squared,
             voters,
             targets,
             snapshot_size,
@@ -190,6 +205,7 @@ macro_rules! election_analysis_for {
             pub(crate) fn [<election_analysis_ $runtime>]<T: EPM::Config>(
                 ext: &mut Ext,
                 output_path: String,
+                compute_unbounded: bool,
             ) -> Result<(), anyhow::Error> {
                 use $crate::[<$runtime _runtime_exports>]::*;
 
@@ -201,20 +217,36 @@ macro_rules! election_analysis_for {
                 let active_era = gadgets::active_era::<Runtime>(ext);
 
                 let phrag_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
-                let dpos_score = gadgets::mine_dpos::<Runtime>(ext)?;
+                let dpos_score_prorata = gadgets::mine_dpos::<Runtime>(ext, ShareDistribution::ProRata)?;
+                let dpos_score_pareto = gadgets::mine_dpos::<Runtime>(ext, ShareDistribution::Pareto)?;
 
-                // force new unbounded snapshot to compute the unbounded npos and dpos elections.
-                let (snapshot_metadata_unbound, snapshot_size_unbound) = gadgets::compute_and_store_unbounded_snapshot::<Runtime>(ext)?;
+                let (
+                    snapshot_metadata_unbound,
+                    snapshot_size_unbound,
+                    phrag_unbound_raw_solution,
+                    dpos_unbound_score_prorata,
+                    dpos_unbound_score_pareto,
+                ) = if compute_unbounded {
+                    // force new unbounded snapshot to compute the unbounded npos and dpos elections.
+                    let (snapshot_metadata_unbound, snapshot_size_unbound) = gadgets::compute_and_store_unbounded_snapshot::<Runtime>(ext)?;
 
-                let phrag_unbound_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
-                let dpos_unbound_score = gadgets::mine_dpos::<Runtime>(ext)?;
+                    let phrag_unbound_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
+                    let dpos_unbound_score_prorata = gadgets::mine_dpos::<Runtime>(ext, ShareDistribution::ProRata)?;
+                    let dpos_unbound_score_pareto = gadgets::mine_dpos::<Runtime>(ext, ShareDistribution::Pareto)?;
+
+                    (snapshot_metadata_unbound, snapshot_size_unbound, phrag_unbound_raw_solution, dpos_unbound_score_prorata, dpos_unbound_score_pareto)
+                } else {
+                    (Default::default(), Default::default(), Default::default(), Default::default(), Default::default())
+                };
 
                 let csv_entry = ElectionEntryCSV::<Runtime>::new(
                     block_number,
                     active_era,
                     (&phrag_raw_solution, &phrag_unbound_raw_solution),
-                    dpos_score,
-                    dpos_unbound_score,
+                    dpos_score_prorata,
+                    dpos_score_pareto,
+                    dpos_unbound_score_prorata,
+                    dpos_unbound_score_pareto,
                     snapshot_metadata,
                     snapshot_size,
                     snapshot_metadata_unbound,
