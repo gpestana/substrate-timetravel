@@ -1,10 +1,10 @@
-//! Main commands of `substrate-etl` CLI
+//! Main commands of `substrate-timetravel` CLI
 //!
 //! The commands are split into two main branches: `extract` and `transform`:
-//! * `substrat-etl extract`: fetches the keys of a given tuple {`block`, `pallets`} using
+//! * `substrat-timetravel extract`: fetches the keys of a given tuple {`block`, `pallets`} using
 //! [`frame_remote_externalities`](https://paritytech.github.io/substrate/master/frame_remote_externalities/index.html)
 //! and stores the externalities snapshot in disk for posterior use.
-//! * `subtrate-etl transform`: computes a given transformation on an externalities and stored the
+//! * `subtrate-timetravel transform`: computes a given transformation on an externalities and stored the
 //! results in a CSV file.
 
 use crate::operations::Operation;

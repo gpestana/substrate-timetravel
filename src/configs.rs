@@ -1,4 +1,4 @@
-//! CLI configs for `subtrate-etl`.
+//! CLI configs for `subtrate-timetravel`.
 
 use super::*;
 use crate::operations::Operation;

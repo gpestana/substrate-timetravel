@@ -285,7 +285,7 @@ where
         let desired_targets =
             EPM::DesiredTargets::<T>::get().ok_or(anyhow!("Desired targets did not exist."))?;
 
-        let mut skip_targets = 0;
+        let skip_targets = 0;
         let mut num_votes_per_voter = vec![];
         let mut assignments: Vec<sp_npos_elections::StakedAssignment<T::AccountId>> = vec![];
 

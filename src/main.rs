@@ -1,24 +1,26 @@
-//! # `substrate-etl` CLI
+//! # `substrate-timetravel` CLI
 //!
-//! #### A CLI tool to extract, process and load state from Substrate-based chains
+//! #### A CLI tool to extract, process and load historical state from Substrate-based chains
 //!
-//! `substrate-etl` is a tool that helps scrapping storage keys from remote substrate nodes and
-//! populate a local externalities that can be stored locally. It also providers an easy way to
-//! mutate and transform the state of externalities using `operations` and `gadgets`.
+//! `substrate-timetravel` helps scrapping storage keys from remote substrate nodes and populate a
+//! local externalities that can easily be turned into snapshots for ergonomics and fast
+//! experimentation. It also provides an easy way to mutate and transform the state of
+//! externalities using pre-developed `gadgets` that can be assembled into `operations`.
 //!
-//! Dividing the "extract" and "transform" phases offers a more ergonomic way to analyse and
-//! tweak with historical chain data locally.
+//! Dividing the "extract" and "transform" phases offers an ergonomic way to analyse and tweak
+//! historical chain data locally.
 //!
-//! The module [`crate::gadgets`] implements modular actions that a dev may find useful when
-//! inspecting and interacting with a populated externalities. The module [`crate::operations`]
+//! The module `crate::gadgets` implements modular actions that a dev may find useful when
+//! inspecting and interacting with a populated externalities. The module `crate::operations`
 //! implements operations that use a set of gadgets to achieve a goal. For example, the
 //! `election_analysis` computes, among other things, election scores using different election
-//! algorithms and computes unbounded snapshot. Those computations rely on gadgets that are
-//! modular and generic to be used by other operations.
+//! algorithms and computes unbounded election snapshots given the state of the chain at a
+//! particular block. Those computations rely on gadgets that are modular and generic to be used by
+//! other operations.
 //!
 //! ## How to use the CLI
 //!
-//! #### 1. `substrate-etl extract`: Extract and store block state locally
+//! #### 1. `substrate-timetravel extract`: Extract and store block state locally
 //!
 //! ```bash
 //!  $ substrate-elt extract --at=<block_hash> --snapshot_path=<path> --pallets=Staking --uri=wss://rpc.polkadot.io:433
@@ -26,9 +28,9 @@
 //! This command will fetch the block keys from a remote node, build an externalities and store its
 //! snapshot to disk for posterior analysis.
 //!
-//! For more information and configuration options, check `substrate-etl extract help`.
+//! For more information and configuration options, check `substrate-timetravel extract help`.
 //!
-//! #### 2. `substrate-etl transform`: Perform a transformation on a block state
+//! #### 2. `substrate-timetravel transform`: Perform a transformation on a block state
 //!
 //! ```bash
 //!  $ substrate-elt transform --at=<block_hash> min_active_stake --snapshot_path=<path> --uri=wss://rpc.polkadot.io:433
@@ -43,7 +45,7 @@
 //! The output of the operation is written in the for of a CSV file in the `output_path` (set by
 //! default as `./output.csv`).
 //!
-//! For more information and configuration options, check `substrate-etl extract help`.
+//! For more information and configuration options, check `substrate-timetravel extract help`.
 //!
 //! #### 3.Extract and transform in one command
 //!
@@ -63,7 +65,7 @@
 //!
 //! ```bash
 //!  $ cargo build
-//!  $ RUST_LOG=info ./target/debug/substrate-etl transform --live --at=0x1477d54ad233824dd60afe1efc76413523c2737fd0cbabe2271568f75f560c74 min-active-stake --uri=wss://rpc.polkadot.io:443
+//!  $ RUST_LOG=info ./target/debug/substrate-timetravel transform --live --at=0x1477d54ad233824dd60afe1efc76413523c2737fd0cbabe2271568f75f560c74 min-active-stake --uri=wss://rpc.polkadot.io:443
 //! ````
 //! The result of the operation is saved in `./output.csv` in the form of
 //!
