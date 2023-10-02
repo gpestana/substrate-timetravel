@@ -18,7 +18,7 @@ use frame_support::traits::Get;
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_npos_elections::{BalancingConfig, ElectionScore, EvaluateSupport};
 use sp_runtime::{traits::Zero, SaturatedConversion};
-use Staking::ActiveEraInfo;
+use Staking::{ActiveEraInfo, BalanceOf as BalanceOfS};
 use EPM::{BalanceOf, RoundSnapshot, SolutionOrSnapshotSize};
 
 /// Returns the current block number.
@@ -125,6 +125,17 @@ where
 
         Ok((metadata, snapshot_len))
     })
+}
+
+/// Calculates the era_payout in the current block.
+pub(crate) fn era_payout<T>(ext: &mut Ext) -> (BalanceOfS<T>, BalanceOfS<T>)
+where
+    T: Timestamp::Config + Staking::Config,
+    BalanceOfS<T>: From<u64>,
+{
+    log::info!(target: LOG_TARGET, "Calculating era_payout.");
+
+    ext.execute_with(|| (10.into(), 20.into()))
 }
 
 /// Calculates the minimum active stake for a existing snapshot.

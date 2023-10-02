@@ -29,6 +29,9 @@ pub(crate) enum Operation {
 
     /// Performs analysys of the election and staking data.
     ElectionAnalysis,
+
+    /// Calculates the era payout.
+    EraPayout,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,6 +39,33 @@ pub(crate) enum Operation {
 pub(crate) struct MinActiveStakeCsv {
     block_number: u32,
     min_active_stake: u128,
+}
+
+/// Calculates the era payout for a given externalities.
+macro_rules! era_payout_for {
+    ($runtime:ident) => {
+        paste::paste! {
+            pub(crate) fn [<era_payout_ $runtime>]<T: EPM::Config>(
+                ext: &mut Ext,
+            ) -> Result<(), anyhow::Error> {
+                use $crate::[<$runtime _runtime_exports>]::*;
+
+                log::info!(target: LOG_TARGET, "Transform::era_payout starting.");
+
+                let era_payout = gadgets::era_payout::<Runtime>(ext);
+                let block_number = gadgets::block_number::<Runtime>(ext);
+
+                log::info!(
+                    target: LOG_TARGET,
+                    "Transform::era_payout result at block #{:?}: {:?}",
+                    block_number,
+                    era_payout,
+                );
+
+                Ok(())
+            }
+        }
+    };
 }
 
 /// Calculates the minimum active stake for a given externalities.
@@ -261,6 +291,10 @@ macro_rules! election_analysis_for {
         }
     };
 }
+
+era_payout_for!(polkadot);
+era_payout_for!(kusama);
+era_payout_for!(westend);
 
 min_active_stake_for!(polkadot);
 min_active_stake_for!(kusama);
