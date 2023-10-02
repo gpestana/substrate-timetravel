@@ -22,13 +22,11 @@ pub const DEFAULT_URI: &str = "wss://rpc.polkadot.io:443";
 /// The logging target.
 pub const LOG_TARGET: &str = "substrate_timetravel";
 
-/// The election provider pallet.
-pub use pallet_election_provider_multi_phase as EPM;
-
-// The staking pallet.
-pub use pallet_staking as Staking;
-
+pub use frame_system as System;
 pub use pallet_bags_list as BagsList;
+pub use pallet_election_provider_multi_phase as EPM;
+pub use pallet_staking as Staking;
+pub use pallet_timestamp as Timestamp;
 
 /// The externalities type.
 pub type Ext = sp_io::TestExternalities;

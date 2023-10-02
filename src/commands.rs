@@ -93,6 +93,7 @@ macro_rules! transform_for {
                 match operation {
                     Operation::MinActiveStake => crate::operations::[<min_active_stake_ $runtime>]::<Runtime>(&mut ext, output_path),
                     Operation::ElectionAnalysis => crate::operations::[<election_analysis_ $runtime>]::<Runtime>(&mut ext, output_path, compute_unbounded),
+                    Operation::EraPayout => crate::operations::[<era_payout_ $runtime>]::<Runtime>(&mut ext),
                 }
             }
         }
