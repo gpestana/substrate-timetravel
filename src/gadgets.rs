@@ -351,7 +351,7 @@ where
     T: EPM::Config + Staking::Config,
 {
     let bn = block_number::<T>(ext);
-    log::info!(target: LOG_TARGET, "Running playground on {:?}.", bn);
+    log::info!(target: LOG_TARGET, "Running playground on block #{:?}.", bn);
 
     // do stuff here
 
