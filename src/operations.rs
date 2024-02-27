@@ -29,6 +29,9 @@ pub(crate) enum Operation {
 
     /// Performs analysys of the election and staking data.
     ElectionAnalysis,
+
+    /// Playground operations -- go whild!
+    Playground,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -262,6 +265,24 @@ macro_rules! election_analysis_for {
     };
 }
 
+/// Playground operation for testing.
+macro_rules! playground_for {
+    ($runtime:ident) => {
+        paste::paste! {
+            pub(crate) fn [<playground_ $runtime>]<T: EPM::Config>(
+                ext: &mut Ext,
+            ) -> Result<(), anyhow::Error> {
+                use $crate::[<$runtime _runtime_exports>]::*;
+
+                log::info!(target: LOG_TARGET, "Transform::playground starting.");
+                gadgets::playground::<Runtime>(ext)?;
+
+                Ok(())
+            }
+        }
+    };
+}
+
 //min_active_stake_for!(polkadot);
 //min_active_stake_for!(kusama);
 min_active_stake_for!(westend);
@@ -269,3 +290,7 @@ min_active_stake_for!(westend);
 //election_analysis_for!(polkadot);
 //election_analysis_for!(kusama);
 election_analysis_for!(westend);
+
+//playground_for(polkadot);
+//playground_for(kusama);
+playground_for!(westend);

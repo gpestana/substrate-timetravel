@@ -132,7 +132,6 @@ where
 {
     log::info!(target: LOG_TARGET, "Calculating min_active_state.");
 
-    //use frame_election_provider_support::SortedListProvider;
     const NPOS_MAX_ITERATIONS_COEFFICIENT: u32 = 2;
 
     ext.execute_with(|| {
@@ -344,4 +343,17 @@ where
 
         Ok(score)
     })
+}
+
+/// Playground gadget.
+pub(crate) fn playground<T>(ext: &mut Ext) -> Result<(), anyhow::Error>
+where
+    T: EPM::Config + Staking::Config,
+{
+    let bn = block_number::<T>(ext);
+    log::info!(target: LOG_TARGET, "Running playground on {:?}.", bn);
+
+    // do stuff here
+
+    ext.execute_with(|| Ok(()))
 }
