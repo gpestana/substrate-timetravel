@@ -17,9 +17,9 @@ use frame_election_provider_support::{
 use frame_support::traits::Get;
 use frame_system::pallet_prelude::BlockNumberFor;
 use sp_npos_elections::{BalancingConfig, ElectionScore, EvaluateSupport};
-use sp_runtime::{traits::Zero, SaturatedConversion};
+use sp_runtime::traits::Zero;
 use Staking::ActiveEraInfo;
-use EPM::{BalanceOf, RoundSnapshot, SolutionOrSnapshotSize};
+use EPM::{BalanceOf, RoundSnapshot, SnapshotWrapper, SolutionOrSnapshotSize};
 
 /// Returns the current block number.
 pub(crate) fn block_number<T: EPM::Config>(ext: &mut Ext) -> BlockNumberFor<T> {
@@ -75,20 +75,18 @@ where
     EPM::Pallet<T>: ElectionProviderBase,
 {
     ext.execute_with(|| {
-        EPM::Pallet::<T>::kill_snapshot();
+        SnapshotWrapper::<T>::kill();
         assert!(<EPM::Snapshot<T>>::get().is_none());
 
-        let target_limit = <T::MaxElectableTargets>::get().saturated_into::<usize>();
-        let voter_limit = <<T as Staking::Config>::VoterList>::iter().count();
+        let election_bounds = T::ElectionBounds::get();
 
         let targets =
-            <<T as EPM::Config>::DataProvider as ElectionDataProvider>::electable_targets(Some(
-                target_limit,
-            ))
+            <<T as EPM::Config>::DataProvider as ElectionDataProvider>::electable_targets(
+                election_bounds.targets,
+            )
             .map_err(|e| anyhow!(e.to_string()))?;
-
         let voters = <<T as EPM::Config>::DataProvider as ElectionDataProvider>::electing_voters(
-            Some(voter_limit),
+            election_bounds.voters,
         )
         .map_err(|e| anyhow!(e.to_string()))?;
 
@@ -138,23 +136,27 @@ where
     const NPOS_MAX_ITERATIONS_COEFFICIENT: u32 = 2;
 
     ext.execute_with(|| {
+        let election_bounds = T::ElectionBounds::get();
+
         let weight_of = pallet_staking::Pallet::<T>::weight_of_fn();
-        let maybe_max_len = Some(T::MaxElectingVoters::get().saturated_into::<usize>());
 
-        let max_allowed_len = {
-            let all_voter_count = T::VoterList::count() as usize;
-            maybe_max_len
-                .unwrap_or(all_voter_count)
-                .min(all_voter_count)
-        };
+        let final_predicted_len = {
+            let all_voter_count = T::VoterList::count();
+            election_bounds
+                .voters
+                .count
+                .unwrap_or(all_voter_count.into())
+                .min(all_voter_count.into())
+                .0
+        } as usize;
 
-        let mut all_voters = Vec::<_>::with_capacity(max_allowed_len);
+        let mut all_voters = Vec::<_>::with_capacity(final_predicted_len);
         let mut min_active_stake = u64::MAX;
         let mut voters_seen = 0u32;
 
         let mut sorted_voters = T::VoterList::iter();
-        while all_voters.len() < max_allowed_len
-            && voters_seen < (NPOS_MAX_ITERATIONS_COEFFICIENT * max_allowed_len as u32)
+        while all_voters.len() < final_predicted_len
+            && voters_seen < (NPOS_MAX_ITERATIONS_COEFFICIENT * final_predicted_len as u32)
         {
             let voter = match sorted_voters.next() {
                 Some(voter) => {
@@ -196,7 +198,7 @@ where
     >,
 {
     ext.execute_with(|| {
-        let (raw_solution, _) = <EPM::Pallet<T>>::mine_solution()
+        let (raw_solution, _, _) = <EPM::Pallet<T>>::mine_solution()
             .map_err(|e| anyhow!("Error mining solution: {:?}.", e))?;
         if do_feasibility {
             let _ = <EPM::Pallet<T>>::feasibility_check(

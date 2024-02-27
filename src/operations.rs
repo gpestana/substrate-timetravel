@@ -262,10 +262,10 @@ macro_rules! election_analysis_for {
     };
 }
 
-min_active_stake_for!(polkadot);
-min_active_stake_for!(kusama);
+//min_active_stake_for!(polkadot);
+//min_active_stake_for!(kusama);
 min_active_stake_for!(westend);
 
-election_analysis_for!(polkadot);
-election_analysis_for!(kusama);
+//election_analysis_for!(polkadot);
+//election_analysis_for!(kusama);
 election_analysis_for!(westend);

@@ -121,15 +121,15 @@ macro_rules! construct_runtime_prelude {
         paste::paste! {
         pub(crate) mod [<$runtime _runtime_exports>] {
             pub(crate) use crate::prelude::*;
-            pub(crate) use [<$runtime _runtime>]::*;
+            pub(crate) use [<$runtime _runtime>]::{Block, Runtime};
             pub(crate) use crate::commands::[<extract_cmd_ $runtime>] as extract_cmd;
             pub(crate) use crate::commands::[<transform_cmd_ $runtime>] as transform_cmd;
         }}
     };
 }
 
-construct_runtime_prelude!(polkadot);
-construct_runtime_prelude!(kusama);
+//construct_runtime_prelude!(polkadot);
+//construct_runtime_prelude!(kusama);
 construct_runtime_prelude!(westend);
 
 #[macro_export]
@@ -137,21 +137,26 @@ macro_rules! any_runtime {
 	($($code:tt)*) => {
 		unsafe {
 			match $crate::RUNTIME {
-				$crate::AnyRuntime::Polkadot => {
-					#[allow(unused)]
-					use $crate::polkadot_runtime_exports::*;
-					$($code)*
-				},
-				$crate::AnyRuntime::Kusama => {
-					#[allow(unused)]
-					use $crate::kusama_runtime_exports::*;
-					$($code)*
-				},
+				//$crate::AnyRuntime::Polkadot => {
+				//	#[allow(unused)]
+				// use $crate::polkadot_runtime_exports::*;
+				//	$($code)*
+				//},
+				//$crate::AnyRuntime::Kusama => {
+				//	#[allow(unused)]
+				// use $crate::kusama_runtime_exports::*;
+				//	$($code)*
+				//},
 				$crate::AnyRuntime::Westend => {
 					#[allow(unused)]
 					use $crate::westend_runtime_exports::*;
 					$($code)*
-				}
+				},
+                _ => {
+                	#[allow(unused)]
+					use $crate::westend_runtime_exports::*;
+					$($code)*
+                },
 			}
 		}
 	}

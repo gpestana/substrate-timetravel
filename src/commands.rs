@@ -38,7 +38,7 @@ macro_rules! extract_for {
 						transport: Transport::Uri(uri),
 						at: Some(block_hash),
 						pallets,
-						hashed_prefixes: vec![<frame_system::BlockHash<Runtime>>::prefix_hash()],
+						hashed_prefixes: vec![<frame_system::BlockHash<Runtime>>::prefix_hash().to_vec()],
 						hashed_keys: vec![[twox_128(b"System"), twox_128(b"Number")].concat()],
 						state_snapshot,
 						..Default::default()
@@ -78,6 +78,7 @@ macro_rules! transform_for {
                     let ext = extract_cmd(uri, default_pallets, block_hash, snapshot_path.clone(), true).await?;
                     ext
                 } else {
+
                     Builder::<Block>::new()
                         .mode(Mode::Offline(OfflineConfig {
 				        state_snapshot: SnapshotConfig::new(snapshot_path.clone()),
@@ -99,10 +100,10 @@ macro_rules! transform_for {
     };
 }
 
-extract_for!(polkadot);
-extract_for!(kusama);
+//extract_for!(polkadot);
+//extract_for!(kusama);
 extract_for!(westend);
 
-transform_for!(polkadot);
-transform_for!(kusama);
+//transform_for!(polkadot);
+//transform_for!(kusama);
 transform_for!(westend);
