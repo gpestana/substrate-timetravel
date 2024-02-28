@@ -82,6 +82,8 @@
 //! 14401873,9517000000
 //! ```
 
+#![feature(async_closure)]
+
 mod commands;
 mod configs;
 mod gadgets;
@@ -246,34 +248,39 @@ async fn main() {
     let outcome = any_runtime! {
         match command {
             Command::Extract(config) => {
-                let block_hash = match config.at {
+                let block_hashes = match config.bn {
                     Some(bh) => bh,
                     None => {
                         log::error!(target: LOG_TARGET, "Config: expected a valid block hash (--at).");
                         return;
                     }
                 };
-                let file_path = format!("{}/{}.data", snapshot_path, block_hash);
-                extract_cmd(rpc.uri().to_string(), config.pallets, block_hash, file_path, false).await
+                let file_paths = block_hashes.iter().map(|h| format!("{}/{}.data", snapshot_path, h)).collect::<Vec<_>>();
+
+                extract_cmd(rpc.uri().to_string(), config.pallets, block_hashes, file_paths, false).await
                 .map_err(|e| {
                     log::error!(target: LOG_TARGET, "Extract error: {:?}", e);
                 }).unwrap();
             },
             Command::Transform(config) => {
-                let block_hash = match config.at {
-                    Some(bh) => bh,
+                let block_hashes = match config.bn {
+                    Some(hs) =>  {
+                        hs
+                    },
                     None => {
                         log::error!(target: LOG_TARGET, "Config: expected a valid block hash (--at).");
                         return;
                     }
                 };
-                let snapshot_path = format!("{}/{}.data", snapshot_path, block_hash);
+
+                let snapshot_paths = block_hashes.iter().map(|h| format!("{}/{}.data", snapshot_path, h)).collect::<Vec<_>>();
+
                 transform_cmd(
                     rpc.uri().to_string(),
                     config.operation,
-                    block_hash,
+                    block_hashes,
                     output_path,
-                    snapshot_path,
+                    snapshot_paths,
                     config.compute_unbounded,
                     config.live
                 ).await

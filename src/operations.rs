@@ -7,7 +7,7 @@
 //! are written into a CSV file.
 
 use crate::configs::Solver;
-use crate::gadgets;
+use crate::gadgets::{self, staking_ledger::staking_ledger_checks};
 use crate::prelude::*;
 use crate::utils::ShareDistribution;
 use sp_npos_elections::ElectionScore;
@@ -26,11 +26,11 @@ use std::marker::PhantomData;
 pub(crate) enum Operation {
     /// Calculates the staking minimum active stake.
     MinActiveStake,
-
-    /// Performs analysys of the election and staking data.
+    /// Performs analysus of the election and staking data.
     ElectionAnalysis,
-
-    /// Playground operations -- go whild!
+    /// Performs checks and analysis of the staking ledger.
+    StakingLedgerChecks,
+    /// Playground operations -- go wild!
     Playground,
 }
 
@@ -46,15 +46,18 @@ macro_rules! min_active_stake_for {
     ($runtime:ident) => {
         paste::paste! {
             pub(crate) fn [<min_active_stake_ $runtime>]<T: EPM::Config>(
-                ext: &mut Ext,
+                mut exts: Vec<Ext>,
                 output_path: String,
             ) -> Result<(), anyhow::Error> {
                 use $crate::[<$runtime _runtime_exports>]::*;
 
+                assert!(exts.len() == 1, "min_active_stake expects only 1 snapshot at a time");
+                let mut ext = &mut exts[0];
+
                 log::info!(target: LOG_TARGET, "Transform::min_active_stake starting.");
 
-                let min_active_stake = gadgets::min_active_stake::<Runtime>(ext);
-                let block_number = gadgets::block_number::<Runtime>(ext);
+                let min_active_stake = gadgets::min_active_stake::<Runtime>(&mut ext);
+                let block_number = gadgets::block_number::<Runtime>(&mut ext);
 
                 let csv_entry = MinActiveStakeCsv {
                     block_number,
@@ -206,7 +209,7 @@ macro_rules! election_analysis_for {
     ($runtime:ident) => {
         paste::paste! {
             pub(crate) fn [<election_analysis_ $runtime>]<T: EPM::Config>(
-                ext: &mut Ext,
+                mut exts: Vec<Ext>,
                 output_path: String,
                 compute_unbounded: bool,
             ) -> Result<(), anyhow::Error> {
@@ -214,14 +217,17 @@ macro_rules! election_analysis_for {
 
                 log::info!(target: LOG_TARGET, "Transform::election_analysis starting.");
 
-                let (snapshot_metadata, snapshot_size) = gadgets::snapshot_data_or_force::<Runtime>(ext);
-                let min_active_stake = gadgets::min_active_stake::<Runtime>(ext);
-                let block_number = gadgets::block_number::<Runtime>(ext);
-                let active_era = gadgets::active_era::<Runtime>(ext);
+                assert!(exts.len() == 1, "election_analysis_for expects only 1 snapshot at a time");
+                let mut ext = &mut exts[0];
 
-                let phrag_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
-                let dpos_score_prorata = gadgets::mine_dpos::<Runtime>(ext, ShareDistribution::ProRata)?;
-                let dpos_score_pareto = gadgets::mine_dpos::<Runtime>(ext, ShareDistribution::Pareto)?;
+                let (snapshot_metadata, snapshot_size) = gadgets::snapshot_data_or_force::<Runtime>(&mut ext);
+                let min_active_stake = gadgets::min_active_stake::<Runtime>(&mut ext);
+                let block_number = gadgets::block_number::<Runtime>(&mut ext);
+                let active_era = gadgets::active_era::<Runtime>(&mut ext);
+
+                let phrag_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, &mut ext, false)?;
+                let dpos_score_prorata = gadgets::mine_dpos::<Runtime>(&mut ext, ShareDistribution::ProRata)?;
+                let dpos_score_pareto = gadgets::mine_dpos::<Runtime>(&mut ext, ShareDistribution::Pareto)?;
 
                 let (
                     snapshot_metadata_unbound,
@@ -231,11 +237,11 @@ macro_rules! election_analysis_for {
                     dpos_unbound_score_pareto,
                 ) = if compute_unbounded {
                     // force new unbounded snapshot to compute the unbounded npos and dpos elections.
-                    let (snapshot_metadata_unbound, snapshot_size_unbound) = gadgets::compute_and_store_unbounded_snapshot::<Runtime>(ext)?;
+                    let (snapshot_metadata_unbound, snapshot_size_unbound) = gadgets::compute_and_store_unbounded_snapshot::<Runtime>(&mut ext)?;
 
-                    let phrag_unbound_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, ext, false)?;
-                    let dpos_unbound_score_prorata = gadgets::mine_dpos::<Runtime>(ext, ShareDistribution::ProRata)?;
-                    let dpos_unbound_score_pareto = gadgets::mine_dpos::<Runtime>(ext, ShareDistribution::Pareto)?;
+                    let phrag_unbound_raw_solution = gadgets::mine_with::<Runtime>(&Solver::SeqPhragmen{iterations: 10}, &mut ext, false)?;
+                    let dpos_unbound_score_prorata = gadgets::mine_dpos::<Runtime>(&mut ext, ShareDistribution::ProRata)?;
+                    let dpos_unbound_score_pareto = gadgets::mine_dpos::<Runtime>(&mut ext, ShareDistribution::Pareto)?;
 
                     (snapshot_metadata_unbound, snapshot_size_unbound, phrag_unbound_raw_solution, dpos_unbound_score_prorata, dpos_unbound_score_pareto)
                 } else {
@@ -265,17 +271,35 @@ macro_rules! election_analysis_for {
     };
 }
 
+/// Performs staking ledger checks.
+macro_rules! staking_ledger_checks_for {
+    ($runtime:ident) => {
+        paste::paste! {
+            pub(crate) fn [<staking_ledger_checks_ $runtime>]<T: EPM::Config + Staking::Config>(
+                exts: Vec<Ext>,
+            ) -> Result<(), anyhow::Error> {
+                use $crate::[<$runtime _runtime_exports>]::*;
+
+                log::info!(target: LOG_TARGET, "Transform::staking_ledger_checks starting.");
+                staking_ledger_checks::<Runtime>(exts)?;
+
+                Ok(())
+            }
+        }
+    };
+}
+
 /// Playground operation for testing.
 macro_rules! playground_for {
     ($runtime:ident) => {
         paste::paste! {
             pub(crate) fn [<playground_ $runtime>]<T: EPM::Config>(
-                ext: &mut Ext,
+                exts: Vec<Ext>,
             ) -> Result<(), anyhow::Error> {
                 use $crate::[<$runtime _runtime_exports>]::*;
 
                 log::info!(target: LOG_TARGET, "Transform::playground starting.");
-                gadgets::playground::<Runtime>(ext)?;
+                gadgets::playground::<Runtime>(exts)?;
 
                 Ok(())
             }
@@ -290,6 +314,10 @@ min_active_stake_for!(westend);
 //election_analysis_for!(polkadot);
 //election_analysis_for!(kusama);
 election_analysis_for!(westend);
+
+//staking_ledger_checks_for(polkadot);
+//staking_ledger_checks_for(kusama);
+staking_ledger_checks_for!(westend);
 
 //playground_for(polkadot);
 //playground_for(kusama);

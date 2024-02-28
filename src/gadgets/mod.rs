@@ -21,6 +21,8 @@ use sp_runtime::traits::Zero;
 use Staking::ActiveEraInfo;
 use EPM::{BalanceOf, RoundSnapshot, SnapshotWrapper, SolutionOrSnapshotSize};
 
+pub(crate) mod staking_ledger;
+
 /// Returns the current block number.
 pub(crate) fn block_number<T: EPM::Config>(ext: &mut Ext) -> BlockNumberFor<T> {
     ext.execute_with(|| <frame_system::Pallet<T>>::block_number())
@@ -346,14 +348,18 @@ where
 }
 
 /// Playground gadget.
-pub(crate) fn playground<T>(ext: &mut Ext) -> Result<(), anyhow::Error>
+pub(crate) fn playground<T>(exts: Vec<Ext>) -> Result<(), anyhow::Error>
 where
     T: EPM::Config + Staking::Config,
 {
-    let bn = block_number::<T>(ext);
-    log::info!(target: LOG_TARGET, "Running playground on block #{:?}.", bn);
+    let _ = exts
+        .into_iter()
+        .map(|mut ext| {
+            ext.execute_with(|| {
+                // do something fun.
+            })
+        })
+        .collect::<Vec<_>>();
 
-    // do stuff here
-
-    ext.execute_with(|| Ok(()))
+    Ok(())
 }

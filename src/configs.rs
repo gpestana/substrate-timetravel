@@ -59,8 +59,8 @@ pub(crate) enum Command {
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) struct ExtractConfig {
     /// The block hash at which scraping happens. If none is provided, the latest head is used.
-    #[arg(long, env = "AT")]
-    pub at: Option<H256>,
+    #[arg(long, env = "BN")]
+    pub bn: Option<Vec<H256>>,
 
     /// List of pallets to scrap keys from the remote node and store in the snapshot.
     #[arg(long, env = "PALLETS", default_values_t = ["ElectionProviderMultiPhase".to_string(), "Staking".to_string(), "VoterList".to_string()])]
@@ -71,9 +71,9 @@ pub(crate) struct ExtractConfig {
 #[derive(Debug, Clone, Parser)]
 #[cfg_attr(test, derive(PartialEq))]
 pub(crate) struct TransformConfig {
-    /// The block hash at which scraping happens. If none is provided, the latest head is used.
-    #[arg(long, env = "AT")]
-    pub at: Option<H256>,
+    /// The block(s) hash(es) at which scraping happens. If none is provided, the latest head is used.
+    #[arg(long, env = "BN")]
+    pub bn: Option<Vec<H256>>,
 
     /// Compute unbounded election operations or not.
     #[arg(long, default_value_t = false)]
