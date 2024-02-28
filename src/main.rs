@@ -82,6 +82,8 @@
 //! 14401873,9517000000
 //! ```
 
+#![feature(async_closure)]
+
 mod commands;
 mod configs;
 mod gadgets;
@@ -121,15 +123,15 @@ macro_rules! construct_runtime_prelude {
         paste::paste! {
         pub(crate) mod [<$runtime _runtime_exports>] {
             pub(crate) use crate::prelude::*;
-            pub(crate) use [<$runtime _runtime>]::*;
+            pub(crate) use [<$runtime _runtime>]::{Block, Runtime};
             pub(crate) use crate::commands::[<extract_cmd_ $runtime>] as extract_cmd;
             pub(crate) use crate::commands::[<transform_cmd_ $runtime>] as transform_cmd;
         }}
     };
 }
 
-construct_runtime_prelude!(polkadot);
-construct_runtime_prelude!(kusama);
+//construct_runtime_prelude!(polkadot);
+//construct_runtime_prelude!(kusama);
 construct_runtime_prelude!(westend);
 
 #[macro_export]
@@ -137,21 +139,26 @@ macro_rules! any_runtime {
 	($($code:tt)*) => {
 		unsafe {
 			match $crate::RUNTIME {
-				$crate::AnyRuntime::Polkadot => {
-					#[allow(unused)]
-					use $crate::polkadot_runtime_exports::*;
-					$($code)*
-				},
-				$crate::AnyRuntime::Kusama => {
-					#[allow(unused)]
-					use $crate::kusama_runtime_exports::*;
-					$($code)*
-				},
+				//$crate::AnyRuntime::Polkadot => {
+				//	#[allow(unused)]
+				// use $crate::polkadot_runtime_exports::*;
+				//	$($code)*
+				//},
+				//$crate::AnyRuntime::Kusama => {
+				//	#[allow(unused)]
+				// use $crate::kusama_runtime_exports::*;
+				//	$($code)*
+				//},
 				$crate::AnyRuntime::Westend => {
 					#[allow(unused)]
 					use $crate::westend_runtime_exports::*;
 					$($code)*
-				}
+				},
+                _ => {
+                	#[allow(unused)]
+					use $crate::westend_runtime_exports::*;
+					$($code)*
+                },
 			}
 		}
 	}
@@ -241,34 +248,39 @@ async fn main() {
     let outcome = any_runtime! {
         match command {
             Command::Extract(config) => {
-                let block_hash = match config.at {
+                let block_hashes = match config.bn {
                     Some(bh) => bh,
                     None => {
                         log::error!(target: LOG_TARGET, "Config: expected a valid block hash (--at).");
                         return;
                     }
                 };
-                let file_path = format!("{}/{}.data", snapshot_path, block_hash);
-                extract_cmd(rpc.uri().to_string(), config.pallets, block_hash, file_path, false).await
+                let file_paths = block_hashes.iter().map(|h| format!("{}/{}.data", snapshot_path, h)).collect::<Vec<_>>();
+
+                extract_cmd(rpc.uri().to_string(), config.pallets, block_hashes, file_paths, false).await
                 .map_err(|e| {
                     log::error!(target: LOG_TARGET, "Extract error: {:?}", e);
                 }).unwrap();
             },
             Command::Transform(config) => {
-                let block_hash = match config.at {
-                    Some(bh) => bh,
+                let block_hashes = match config.bn {
+                    Some(hs) =>  {
+                        hs
+                    },
                     None => {
                         log::error!(target: LOG_TARGET, "Config: expected a valid block hash (--at).");
                         return;
                     }
                 };
-                let snapshot_path = format!("{}/{}.data", snapshot_path, block_hash);
+
+                let snapshot_paths = block_hashes.iter().map(|h| format!("{}/{}.data", snapshot_path, h)).collect::<Vec<_>>();
+
                 transform_cmd(
                     rpc.uri().to_string(),
                     config.operation,
-                    block_hash,
+                    block_hashes,
                     output_path,
-                    snapshot_path,
+                    snapshot_paths,
                     config.compute_unbounded,
                     config.live
                 ).await

@@ -31,7 +31,9 @@ pub use pallet_staking as Staking;
 pub use pallet_bags_list as BagsList;
 
 /// The externalities type.
-pub type Ext = sp_io::TestExternalities;
+//pub type Ext = sp_io::TestExternalities;
+use sp_runtime::traits::BlakeTwo256;
+pub type Ext = sp_state_machine::TestExternalities<BlakeTwo256>;
 
 /// The key pair type being used. We "strongly" assume sr25519 for simplicity.
 pub type Pair = sp_core::sr25519::Pair;
